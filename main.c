@@ -21,15 +21,19 @@ void print_symbolTable(symbol ** head);
 data * create_data(data * new_node, char val[TOKEN_LEN], int tt);
 int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]);
 int updateDataTable(data** head, char* val, int tt);
+int isRegister(char* reg);
+int isNum(char* num);
+void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]);
 /*function declerations end*/
 
 int dc = 0, ic = 0, line = 0, symbolFlag = 0;
 enum tokenType { Symbol, Extern, Entry, Data, String };
 enum flagState { Off, On };
 enum char_type { NUM, STR };
+enum operands { Num, Var, P_reg, Reg};
 char operations[OPERATIONS_CNT][2][5] = {
-	{"mov", "2"},{"cmp", "2"},{"add", "2"},{"sub", "2"},{"lea", "2"},{"clr", "2"},{"not", "2"},{"inc", "1"},
-	{"dec", "1"},{"jmp", "1"},{"bne", "1"},{"red", "2"},{"prn", "1"},{"jsr", "2"},{"rts", "2"}, {"stop", "0"}
+	{"mov", "2"},{"cmp", "2"},{"add", "2"},{"sub", "2"},{"lea", "2"},{"clr", "1"},{"not", "1"},{"inc", "1"},{"dec", "1"},{"jmp", "1"},{"bne", "1"},
+	{"red", "1"},{"prn", "1"},{"jsr", "1"},{"rts", "0"}, {"stop", "0"}
 };
 symbol * symbolsTable;
 data * dataTable;
@@ -62,6 +66,7 @@ void read_file(char file_name[30]) {
 	/*read line*/
 	while (fgets(buffer, MAX_CMD_TOKENS * TOKEN_LEN + 1, fp) != NULL) {
 		int fields;
+		if (buffer[0] == ';') continue;
 		fields = tokenize_cmd(buffer, tokens[line]);/*separate to fields*/
 		handleLine(fields, tokens[line++]);
 		buffer[0] = 0;/*clear the buffer to be ready for next line*/
@@ -99,7 +104,7 @@ int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 							updateDataTable(&dataTable, tokens[i], Data);
 						}
 						else if (sf == String) {
-							int k;
+							unsigned k;
 							for (k = 0; k < strlen(tokens[i]); k++) {
 								updateDataTable(&dataTable, tokens[i][k], String);
 							}
@@ -108,23 +113,159 @@ int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 				}
 		}
 		else if (sf >= 10) {//if operation
-			//handle_operation(tokens);
 			int cnt = 0;
 			for (int i = 2; i < fields; i++)
 				if (strcmp(tokens[i], ",") == 0) cnt++;
 			int validArgNum = fields - 2 - cnt - atoi(operations[sf - 10][1]);//0 == valid
 		
 			printf(">>> %s ", operations[sf - 10][0]);
-			if (validArgNum == 0)
-				printf("- valid\n");
+			if (validArgNum == 0) {
+				if (updateSymbolTable(&symbolsTable, tokens[0], 0, 0)) {
+					printf("- valid\n");
+					handle_operation(2, sf - 10, fields, tokens);
+				}
+			}
 			else
 				printf("- Not valid\n");
 
 		}
 	}
+	else if (ff >= 10) {
+		int cnt = 0;
+		for (int i = 1; i < fields; i++)
+			if (strcmp(tokens[i], ",") == 0) cnt++;
+		int validArgNum = fields - 1 - cnt - atoi(operations[ff - 10][1]);//0 == valid
 
+		printf(">>> %s ", operations[ff - 10][0]);
+		if (validArgNum == 0) {
+			printf("- valid\n");
+			handle_operation(1, ff - 10, fields, tokens);
+		}
+		else
+			printf("- Not valid\n");
+	}
+	return 1;
 }
 
+void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
+	unsigned  tmp;
+	int i, k, op_l, op_r, valid, num_of_words = 0;
+	printf("%d->", op);
+	for (i = start, k = 0; i < fields; i++) {
+		printf("%s", tokens[i]);
+	}
+	putchar('\n');
+
+	if (op >= 0 && op <= 13) {//if op use 1 or 2 args
+		op_l = get_operand_type(tokens[start]);
+		if (op >= 0 && op <= 4)
+			op_r = get_operand_type(tokens[start + 2]);
+		else
+			op_r = -2;//op not in use
+		if (op_l == -1 || op_r == -1) {
+			printf("Illegal operand -> op_l: %d, op_r: %d\n", op_l, op_r);
+			return 0; }
+		valid = is_op_valid(op, op_l, op_r);
+		if (valid) {//need to calculate how many memory words we need to reserve for the next iteration
+			if (op >= 0 && op <= 4) {
+				if (op_l == Reg && op_r == Reg)
+					num_of_words += 2;//1 for operation + 1 for shared word
+				else
+					num_of_words += 3;//1 for operation + 1 for each operand(2)
+			}
+			else if (op > 4 && op <= 13)
+				num_of_words += 2;//1 for operation + 1 for operand
+		}
+	}
+	else {// if operation needs no operands
+		num_of_words += 1;// only for the operation
+	}
+	ic += num_of_words;
+	printf("IC: %d\n", ic);
+}
+
+
+int is_op_valid(int op, int op_l, int op_r) {
+	printf("==>>>%s  %d, %d\n",operations[op][0], op_l, op_r);
+	if (op == 1) {//cmp
+		if (op_l >= Num && op_l <= Reg && op_r >= Num && op_r <= Reg)
+			return 1;
+	}
+	if (op == 4) {//lea
+		if (op_l >= Var && op_l <= Reg && op_r == Var)
+			return 1;
+	}
+	if (op == 0 || op == 2 || op == 3) {//mov add sub
+		if (op_l >= Var && op_l <= Reg && op_r >= Num && op_r <= Reg)
+			return 1;
+	}
+
+	if (op == 5 || op == 6 || op == 7 || op == 8 || op == 11) {//clr not inc dec red
+		if (op_l >= Var && op_l <= Reg)
+			return 1;
+	}
+	if (op == 9 || op == 10 || op == 13) {//jmp bne jsr
+		if (op_l >= Var && op_l <= P_reg)
+			return 1;
+	}
+	if (op == 12) {//prn
+		if (op_l >= Num && op_l <= Reg)
+			return 1;
+	}
+	return 0;
+}
+int get_operand_type(char * op) {
+	int tmp;
+	tmp = isRegister(op);
+	//printf("_________\n206-> %d\n________\n", tmp);
+	if (tmp != -1) return tmp;
+	tmp = isNum(op);
+	//printf("_________\n209-> %d\n________\n", tmp);
+	if (tmp != -1) return tmp;
+	tmp = looks_like_label(op);
+	//printf("_________\n212-> %d\n________\n", tmp);
+	if (tmp != -1) return Var;
+	return -1;
+}
+int looks_like_label(char * str) {
+	int i;
+	if ((str[0] < 'a' || str[0] > 'z') && (str[0] < 'A' || str[0] > 'Z')) return -1; // label must start with letter
+	for (i = 0; i < strlen(str); i++) {
+		if ((str[i] < 'a' || str[i] > 'z') && (str[i] < 'A' || str[i] > 'Z') && (str[i] < '0' || str[i] > '9'))
+			return -1;
+	}
+	return Var;
+}
+int isRegister(char * reg) {
+	if (strcmp(reg, "r0") == 0) return Reg;
+	if (strcmp(reg, "r1") == 0) return Reg;
+	if (strcmp(reg, "r2") == 0) return Reg;
+	if (strcmp(reg, "r3") == 0) return Reg;
+	if (strcmp(reg, "r4") == 0) return Reg;
+	if (strcmp(reg, "r5") == 0) return Reg;
+	if (strcmp(reg, "r6") == 0) return Reg;
+	if (strcmp(reg, "r7") == 0) return Reg;
+	if (strcmp(reg, "*r0") == 0) return P_reg;
+	if (strcmp(reg, "*r1") == 0) return P_reg;
+	if (strcmp(reg, "*r2") == 0) return P_reg;
+	if (strcmp(reg, "*r3") == 0) return P_reg;
+	if (strcmp(reg, "*r4") == 0) return P_reg;
+	if (strcmp(reg, "*r5") == 0) return P_reg;
+	if (strcmp(reg, "*r6") == 0) return P_reg;
+	if (strcmp(reg, "*r7") == 0) return P_reg;
+	return -1;
+}
+int isNum(char * num) {
+	unsigned i, start;
+	start = 1;
+	if (num[0] != '#') return -1;
+	if (num[1] == '-') start = 2;
+	for (i = start; i < strlen(num); i++) {
+		if (num[i] < '0' && num[i] >'9')
+			return -1;
+	}
+	return Num;
+}
 void translateToWord(char token[TOKEN_LEN], word * dest, int charType) {
 	int i, val;
 	if (charType == Data) {
@@ -156,7 +297,7 @@ void print_tokens(char tokens[MAX_FILE_LEN][MAX_CMD_TOKENS][TOKEN_LEN]) {
 }
 
 int tokenize_cmd(char str[MAX_CMD_TOKENS * TOKEN_LEN + 1], char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
-	int i, k, t;
+	unsigned i, k, t;
 	char tmp[TOKEN_LEN];
 	i = 0;
 	while (str[i] == ' ' && i++ < strlen(str));//remove leading spaces
@@ -228,7 +369,7 @@ int updateFlag(int * flag, int state) {
 //return 1 if success, 0 if fails
 int updateSymbolTable(symbol ** head, char name[SYMBOL_LEN], int isInstruction, int isExternal) {
 	symbol * new_symbol = *head; /*declaration*/
-	//printf("address => %d, Value: %s\n", new_symbol, name);
+	if (name[strlen(name) - 1] == ':') name[strlen(name) - 1] = '\0';
 	if (!new_symbol) /*head is empty*/
 	{
 		new_symbol = create_symbol(new_symbol, name, isInstruction, isExternal);
@@ -248,23 +389,20 @@ int updateSymbolTable(symbol ** head, char name[SYMBOL_LEN], int isInstruction, 
 
 
 int symbolExists(char name[SYMBOL_LEN]) {
-	symbol * current_symbol = &symbolsTable;
+	symbol* current_symbol = &symbolsTable;
 	int i = 0;
-	while (0) {
-		int tmp ;
-		printf("%d> %s\n",i++,name);
+	while (current_symbol) {
+		int tmp;
 		tmp = strcmp(name, current_symbol->name);
 		if (tmp == 0) {
+			//if (current_symbol->isInstruction == 1)
+				//return 2;
 			return 1;
-			break;
 		}
 		current_symbol = current_symbol->next;
 	}
 	return 0;
-	//TODO - step 6.1 - check if symbol exists at symbol table 
-	//TODO step- 11 - if definition symbol, insert into symbol table with code property, value= IC+100, check if symbol exist (yes=error) 
 }
-
 
 int updateDataTable(data ** head, char *val, int tt){
 	data * new_data = *head;
@@ -323,7 +461,7 @@ symbol * create_symbol(symbol * new_node, char name[SYMBOL_LEN], int isInstructi
 			new_node->address = dc;
 	}
 	else
-		new_node->address = ic;
+		new_node->address = ic + 100;
 	return new_node;
 }
 
@@ -350,3 +488,7 @@ data * create_data(data * new_node, char val[TOKEN_LEN],int tt) {
 	void initData(data** h) {
 		*h = NULL;
 	}
+
+
+
+
