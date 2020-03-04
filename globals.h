@@ -17,8 +17,13 @@ typedef struct Symbol {
 typedef struct Data {
 	int address;
 	word value;
-	struct data * next;
+	struct data* next;
 } data;
+typedef struct Instruction {
+	int address;
+	word value;
+	struct Instruction * next;
+} instruction;
 
  
 /*TODO - ADD flags like "symbol definition"*/
