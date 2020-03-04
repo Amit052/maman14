@@ -22,7 +22,11 @@ typedef struct Data {
 typedef struct Instruction {
 	int address;
 	word value;
+<<<<<<< HEAD
 	struct Instruction* next;
+=======
+	struct Instruction * next;
+>>>>>>> amit
 } instruction;
 
  
