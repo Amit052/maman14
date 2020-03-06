@@ -26,6 +26,10 @@
     <ClCompile Include="main.c" />
     <ClCompile Include="test.c" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="input1.as" />
+    <None Include="input2.as" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{5CBB1A02-89A9-4B3C-8C2B-0918D8C53173}</ProjectGuid>

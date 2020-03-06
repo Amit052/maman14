@@ -4,7 +4,7 @@
 #include <string.h>
 #include "globals.h"
 #include "hardware.h"
-
+// int string no label
 /*function declerations*/
 void read_file(char file_name[30]);
 int tokenize_cmd(char str[MAX_CMD_TOKENS * TOKEN_LEN + 1], char tokens[MAX_CMD_TOKENS][TOKEN_LEN]);
@@ -13,11 +13,15 @@ int updateSymbolTable(symbol ** head, char name[SYMBOL_LEN], int isInstruction, 
 int updateFlag(int * flag, int );
 void create_first_bin_word(word* w, int op_code, int op_l, int op_r);
 void initSymbols(symbol** h);
-char* dec_2_bin(char* str, int num);
+void fix_symbolTable_addresses(symbol** head);
+void print_instructionsTable(instruction** head);
+instruction* create_instruction(instruction* new_node, word w);
+char* dec_2_bin(char* str, int num, int length);
+char* op_2_str(int op, char* val);
 void initData(data** h);
 int is_op_valid(int op, int op_l, int op_r);
+int prepare_instruction_words(int op_code, int op_l, int op_r, char* val_l, char* val_r);
 void initInstructions(instruction** h);
-instruction* create_instruction(instruction* new_node, int op_code, int op_l, int op_r, char* val_l, char* val_r);
 symbol * create_symbol(symbol * new_node, char name[SYMBOL_LEN], int isInstruction, int isExternal);
 int symbolExists(char name[SYMBOL_LEN]);
 int getTokenType(char token[TOKEN_LEN]);
@@ -43,23 +47,26 @@ char operations[OPERATIONS_CNT][2][5] = {
 symbol * symbolsTable;
 data * dataTable;
 instruction * instructionTable;
+int chips = 0;
  
 
 
 
 void main() {
- 
+
 	initSymbols(&symbolsTable);
 	initData(&dataTable);
 	initInstructions(&instructionTable);
 
-	read_file("input1.as");
+	read_file("input2.as");
+	fix_symbolTable_addresses(&symbolsTable);
 	printf("Data Table:\n");
 	print_dataTable(&dataTable);
 	printf("Sybols Table:\n");
 	print_symbolTable(&symbolsTable);
+	print_instructionsTable(&instructionTable);
+	printf("IC: %d\n", ic);
 }
-
 
 void read_file(char file_name[30]) {
 	char tokens[MAX_FILE_LEN][MAX_CMD_TOKENS][TOKEN_LEN] = {'\0'};
@@ -73,11 +80,7 @@ void read_file(char file_name[30]) {
 	/*read line*/
 	while (fgets(buffer, MAX_CMD_TOKENS * TOKEN_LEN + 1, fp) != NULL) {
 		int fields;
-<<<<<<< HEAD
-		if (buffer[0] == ';') continue;
-=======
 		if (buffer[0] == ';') continue;//need to finish 
->>>>>>> amit
 		fields = tokenize_cmd(buffer, tokens[line]);/*separate to fields*/
 		handleLine(fields, tokens[line++]);
 		buffer[0] = 0;/*clear the buffer to be ready for next line*/
@@ -87,20 +90,21 @@ void read_file(char file_name[30]) {
 }
 
 int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
-	//enum tokenType { Symbol, Extern, Entry, Data, String };
+
 	int ff;//ff == first field
 	ff = getTokenType(tokens[0]);/*get field type*/
 	if ((ff == Extern || ff == Symbol) && symbolExists(tokens[0])) {
 		printf("%s -> Symbol already exists.\n", tokens[0]);
 		return 0;
 	}
-	if (ff == Extern) {/*if extern, need to ignore on first round*/
+	if (ff == Extern) {/*if Extern, update symbol table with second field*/
 		int tmp;
 		tmp = updateSymbolTable(&symbolsTable, tokens[1], 0, 1);
 		if (tmp == 0) printf("Error saving symbol %s\n", tokens[1]);
 		return 0;
 	}
-	else if (ff == Entry) {/*if entry, update symbol table with second field*/
+	/*if Entry, need to ignore on first round*/
+	else if (ff == Entry) {
 		return 1;
 	}
 	else if (ff == Symbol) {
@@ -116,9 +120,10 @@ int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 						}
 						else if (sf == String) {
 							unsigned k;
-							for (k = 0; k < strlen(tokens[i]); k++) {
+							for (k = 0; k <= strlen(tokens[i]); k++) {
 								updateDataTable(&dataTable, tokens[i][k], String);
 							}
+
 						}
 					}
 				}
@@ -129,17 +134,10 @@ int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 				if (strcmp(tokens[i], ",") == 0) cnt++;
 			int validArgNum = fields - 2 - cnt - atoi(operations[sf - 10][1]);//0 == valid
 		
-<<<<<<< HEAD
-			printf(">>> %s ", operations[sf - 10][0]);
-			if (validArgNum == 0) {
-				if (updateSymbolTable(&symbolsTable, tokens[0], 0, 0)) {
-					printf("- valid\n");
-=======
 			//printf(">>> %s ", operations[sf - 10][0]);
 			if (validArgNum == 0) {
 				if (updateSymbolTable(&symbolsTable, tokens[0], 0, 0)) {
 					//printf("- valid\n");
->>>>>>> amit
 					handle_operation(2, sf - 10, fields, tokens);
 				}
 			}
@@ -147,16 +145,36 @@ int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 				printf("- Not valid\n");
 
 		}
-	}
+	}/*----------------------------------------------------------------------------------*/
+	/*----------------------------------------------------------------------------------*/
+
+if (ff == String || ff == Data) {//if instruction, parse parameters to word and move to data table
+	int i;
+		for (i = 1; i < fields; i++) {
+			if (strcmp(tokens[i], ",") == 0) continue;
+			if (ff == Data) {
+				updateDataTable(&dataTable, tokens[i], Data);
+			}
+			else if (ff == String) {
+				unsigned k;
+				for (k = 0; k <= strlen(tokens[i]); k++) {
+					updateDataTable(&dataTable, tokens[i][k], String);
+				}
+
+			}
+		}
+}
+	/*----------------------------------------------------------------------------------*/
+	/*----------------------------------------------------------------------------------*/
 	else if (ff >= 10) {
 		int cnt = 0;
 		for (int i = 1; i < fields; i++)
 			if (strcmp(tokens[i], ",") == 0) cnt++;
 		int validArgNum = fields - 1 - cnt - atoi(operations[ff - 10][1]);//0 == valid
 
-		printf(">>> %s ", operations[ff - 10][0]);
+		//printf(">>> %s ", operations[ff - 10][0]);
 		if (validArgNum == 0) {
-			printf("- valid\n");
+			//printf("- valid\n");
 			handle_operation(1, ff - 10, fields, tokens);
 		}
 		else
@@ -166,15 +184,6 @@ int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 }
 
 void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
-<<<<<<< HEAD
-	unsigned  tmp;
-	int i, k, op_l, op_r, valid, num_of_words = 0;
-	printf("%d->", op);
-	for (i = start, k = 0; i < fields; i++) {
-		printf("%s", tokens[i]);
-	}
-	putchar('\n');
-=======
 	int i, k, op_l, op_r, valid, num_of_words = 0;
 	op_l = op_r = -2;
 	/*
@@ -184,13 +193,15 @@ void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS]
 	*/
 	if (op >= 0 && op <= 13) {//if op use 1 or 2 args
 		op_l = get_operand_type(tokens[start]);
-		if (op >= 0 && op <= 4)
+		if (op >= 0 && op <= 4) {
 			op_r = get_operand_type(tokens[start + 2]);
+		}
 		else
 			op_r = -2;//op not in use
-		if (op_l == -1 || op_r == -1) {
+		if (op_l == -1 || op_r == -1) {//-1 is when operand type not recognized
 			printf("Illegal operand -> op_l: %d, op_r: %d\n", op_l, op_r);
-			return; }
+			return;
+		}
 		valid = is_op_valid(op, op_l, op_r);
 		if (valid) {//need to calculate how many memory words we need to reserve for the next iteration
 			if (op >= 0 && op <= 4) {
@@ -206,8 +217,11 @@ void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS]
 	else {// if operation needs no operands
 		num_of_words += 1;// only for the operation
 	}
-	ic += num_of_words;
-	update_instruction_table(&instructionTable, op, op_l, op_r, tokens[start], tokens[start + 2]);
+
+
+
+	prepare_instruction_words(op, op_l, op_r, tokens[start], tokens[start + 2]);
+	printf("ic: %d ____\n\n", ic);
 }
 
 
@@ -221,126 +235,165 @@ char * dec_2_bin(char * str, int num, int length) {
 	*(str + length) = '\0';
 	return str;
 }
-int strip_number(char * str) {
 
+
+
+int strip_number(char * str) {
+	int i = 0, l;
+	l = strlen(str) - 1;
+	char* tmp = (char *)malloc(sizeof(char) * l);
+	for (i = 1; i < strlen(str); i++) {
+		tmp[i - 1] = str[i]; 
+	}
+	tmp[i - 1] = '\0';
+	l = atoi(tmp);
+	return l;
 }
-int update_instruction_table(instruction ** h, int op_code, int op_l, int op_r, char * val_l, char * val_r) {
-	instruction* new_node = *h;
+int prepare_instruction_words(int op_code, int op_l, int op_r, char * val_l, char * val_r) {
 	word w, w1, w2;
-	int tmp, l, value, bin_len = 0;
+	w.bits[0] = w1.bits[0] = w2.bits[0] = '\0';
 	char tmp_bin_left[13], tmp_bin_right[13];
 	create_first_bin_word(&w, op_code, op_l, op_r);// set w as the first word needed
+	strcpy(tmp_bin_left, op_2_str(op_l, val_l));
+	strcpy(tmp_bin_right, op_2_str(op_r, val_r));
+	//start assemble the words
+	if (op_l == Reg || op_l == P_reg) {
+		strcpy(w1.bits, "000000");
+		strcat(w1.bits, tmp_bin_left);
 
-	if (op_l != -2) {//if left operand is not empty
-		if (op_l == Reg || op_l == P_reg) bin_len = 3;
-		if (op_l == Num) bin_len = 12;
-			l = strlen(val_l);
-			if (l > 0) {
-				if (op_l == Reg || op_l == P_reg)
-					value = val_l[l - 1] - 48;//48 == ascii distance between char to actual num
-				else if (op_l == Num)
-					value = strip_number(val_l);
-				else if (op_l == Var)
-					value = 0;
-				dec_2_bin(tmp_bin_left, value, bin_len);//prepare the left str
-			}
-	}
-	if (op_r != -2) {//if right operand is not empty
-		if (op_r == Reg || op_r == P_reg) bin_len = 3;
-		if (op_r == Num) bin_len = 12;
-		l = strlen(val_l);
-		if (l > 0) {
-			if (op_r == Reg || op_r == P_reg)
-				value = val_r[l - 1] - 48;//48 == ascii distance between char to actual num
-			else if(op_r == Num)
-				value = value = strip_number(val_r);
-			else if (op_l == Var)
-			dec_2_bin(tmp_bin_right, value, bin_len);//prepare the left str
+		if (op_r == Reg || op_r == P_reg) {
+			strcat(w1.bits, tmp_bin_right);
+		}
+		else {
+			strcat(w1.bits, "000");
 		}
 	}
-	 
+	if (op_l == Num) {
+		strcpy(w1.bits, tmp_bin_left);
+	}
 
-	printf("__________\n%s\nleft: %s=>%s\nright: %s=>%s\n_________\n", w.bits,val_l, tmp_bin_left,val_r, tmp_bin_right);
+	if (op_l == Var) {
+		strcpy(w1.bits, "000000000000");
+	}
+	if (op_r == Reg || op_r == P_reg) {
+		if (op_l != Reg && op_l != P_reg) {//this cases already taken care if they are equal to reg || P_reg
+			strcpy(w2.bits, "000000000");
+			strcat(w2.bits, tmp_bin_right);
+		}
+	}
+	if (op_r == Num) {
+		strcpy(w2.bits, tmp_bin_right);
+	}
+
+	if (op_r == Var) {
+		strcpy(w2.bits, "000000000000");
+	}
+	//printf("IC: %d, %s ", ic, operations[op_code][0]);
+	update_instruction_table(&instructionTable, w);
+	
+	if (strlen(w1.bits)) {
+		strcat(w1.bits, "000");
+		printf("%s ", val_l);
+		update_instruction_table(&instructionTable, w1);
+		
+	}
+	if (strlen(w2.bits)) {
+		strcat(w2.bits, "000");
+		printf("%s ", val_r);
+		update_instruction_table(&instructionTable, w2);
+		
+	}
+	puts("" );
+	return 1;
+}
+
+update_instruction_table(instruction ** h, word w) {
+	instruction* new_node = *h;
 	if (!new_node) {
-		new_node = create_instruction(new_node, op_code, op_l, op_r, val_l, val_r);
+		new_node = create_instruction(new_node, w);
 		*h = new_node;
 	}
-	else {
+	else
+	{
 		while (new_node->next != NULL)
+		{
 			new_node = new_node->next;
-		new_node->next = create_instruction(new_node, op_code, op_l, op_r, val_l, val_r);
+		}
+
+		new_node->next = create_instruction(new_node, w);
 	}
+	return 1;
+}
+
+instruction * create_instruction(instruction * new_node, word w) {
+	new_node = (instruction*)malloc(sizeof(instruction));
+	if (!new_node)
+	{
+		return NULL;
+	}
+	new_node->address = 100 + ic++;
+	chips++;
+	strcpy(&new_node->value, w.bits);
+	new_node->next = NULL;
+	return new_node;
+}
+
+char* op_2_str(int op, char * val) {
+	int bin_len = 0, value = 0;
+	char tmp_bin[13];
+	if (strlen(val)) {
+		if (op == Reg || op == P_reg) {
+			bin_len = 3;
+			value = val[strlen(val) - 1] - 48;//48 == ascii distance between char to actual num
+		}
+		if (op == Num) {
+			bin_len = 12;
+			value = strip_number(val);
+		}
+		if (op == Var) {
+			bin_len = 12;
+			value = 0;
+		}
+		dec_2_bin(tmp_bin, value, bin_len);
+	}
+	else {
+		tmp_bin[0] = '\0';
+	}
+	return tmp_bin;
 }
  void create_first_bin_word(word * w, int op_code, int op_l, int op_r){
 	 char tmp_bin[5];
 
 	 dec_2_bin(tmp_bin, op_code, 4);
 	 strcpy(w->bits, tmp_bin);
-
-	 if (op_l != -2) {
-		 dec_2_bin(tmp_bin, op_l, 4);
-		 strcat(w->bits, tmp_bin);
+	 switch (op_l)
+	 {
+	 case -2: strcat(w->bits, "0000"); break;
+	 case Num: strcat(w->bits, "0001"); break;
+	 case Var: strcat(w->bits, "0010"); break;
+	 case P_reg: strcat(w->bits, "0100"); break;
+	 case Reg: strcat(w->bits, "1000"); break;
+	 default:
+		 break;
 	 }
-	 else {
-		 strcat(w->bits, "0000");
+	 switch (op_r)
+	 {
+	 case -2: strcat(w->bits, "0000"); break;
+	 case Num: strcat(w->bits, "0001"); break;
+	 case Var: strcat(w->bits, "0010"); break;
+	 case P_reg: strcat(w->bits, "0100"); break;
+	 case Reg: strcat(w->bits, "1000"); break;
+	 default:
+		 break;
 	 }
-	 if (op_r != -2) {
-		 dec_2_bin(tmp_bin, op_r, 4);
-		 strcat(w->bits, tmp_bin);
-	 }
-	 else {
-		 strcat(w->bits, "0000");
-	 }
-	 strcat(w->bits, "000");//A.R.E - to understand later
+ 
+	 strcat(w->bits, "100");
  }
-instruction * create_instruction(instruction * new_node, int op, int op_l, int op_r, char* val_l, char* val_r) {
 
-	new_node = (instruction*)malloc(sizeof(instruction));
-	if (new_node == NULL) return NULL;
-	new_node->next = NULL;
 
-		if (op >= 0 && op <= 4) {
-			if (op_l == Reg) {}
-		}
-		else if (op > 4 && op <= 13) {}
-	
->>>>>>> amit
-
-	if (op >= 0 && op <= 13) {//if op use 1 or 2 args
-		op_l = get_operand_type(tokens[start]);
-		if (op >= 0 && op <= 4)
-			op_r = get_operand_type(tokens[start + 2]);
-		else
-			op_r = -2;//op not in use
-		if (op_l == -1 || op_r == -1) {
-			printf("Illegal operand -> op_l: %d, op_r: %d\n", op_l, op_r);
-			return 0; }
-		valid = is_op_valid(op, op_l, op_r);
-		if (valid) {//need to calculate how many memory words we need to reserve for the next iteration
-			if (op >= 0 && op <= 4) {
-				if (op_l == Reg && op_r == Reg)
-					num_of_words += 2;//1 for operation + 1 for shared word
-				else
-					num_of_words += 3;//1 for operation + 1 for each operand(2)
-			}
-			else if (op > 4 && op <= 13)
-				num_of_words += 2;//1 for operation + 1 for operand
-		}
-	}
-	else {// if operation needs no operands
-		num_of_words += 1;// only for the operation
-	}
-	ic += num_of_words;
-	printf("IC: %d\n", ic);
-}
-
-<<<<<<< HEAD
-//int update
-=======
->>>>>>> amit
 
 int is_op_valid(int op, int op_l, int op_r) {
-	printf("==>>>%s  %d, %d\n",operations[op][0], op_l, op_r);
+	//printf("==>>>%s  %d, %d\n",operations[op][0], op_l, op_r);
 	if (op == 1) {//cmp
 		if (op_l >= Num && op_l <= Reg && op_r >= Num && op_r <= Reg)
 			return 1;
@@ -371,20 +424,10 @@ int is_op_valid(int op, int op_l, int op_r) {
 int get_operand_type(char * op) {
 	int tmp;
 	tmp = isRegister(op);
-<<<<<<< HEAD
-	//printf("_________\n206-> %d\n________\n", tmp);
-	if (tmp != -1) return tmp;
-	tmp = isNum(op);
-	//printf("_________\n209-> %d\n________\n", tmp);
-	if (tmp != -1) return tmp;
-	tmp = looks_like_label(op);
-	//printf("_________\n212-> %d\n________\n", tmp);
-=======
 	if (tmp != -1) return tmp;
 	tmp = isNum(op);
 	if (tmp != -1) return tmp;
 	tmp = looks_like_label(op);
->>>>>>> amit
 	if (tmp != -1) return Var;
 	return -1;
 }
@@ -594,13 +637,36 @@ void print_dataTable(data ** head) {
 	{
 		printf("> value: %s\n",&tmp->value);
 		tmp = tmp->next;
+
 	}
 }
-void print_symbolTable(symbol ** head) {
-	symbol * tmp = *head;
+void print_symbolTable(symbol** head) {
+	symbol* tmp = *head;
 	while (tmp)
 	{
-		printf("> value: %s\n", tmp->name);
+		printf(">address: %d,  value: %s\n", tmp->address, tmp->name);
+		tmp = tmp->next;
+	}
+}
+void fix_symbolTable_addresses(symbol** head) {
+	symbol* tmp = *head;
+	while (tmp)
+
+	{
+		printf("%s %d %d\n", tmp->name, tmp->isInstruction, tmp->address);
+		if(tmp->isInstruction)
+			tmp->address += (100 + ic);
+		tmp = tmp->next;
+	}
+}
+
+
+void print_instructionsTable(instruction** head) {
+	instruction* tmp = *head;
+	printf("Instructions Table\n");
+	while (tmp)
+	{
+		printf("%s | %d\n", &tmp->value, tmp->address);
 		tmp = tmp->next;
 	}
 }
@@ -616,13 +682,16 @@ symbol * create_symbol(symbol * new_node, char name[SYMBOL_LEN], int isInstructi
 	strcpy(new_node->name, name);
 	new_node->next = NULL;
 	if (isInstruction) {
+		new_node->isInstruction = 1;
 		if (isExternal)
 			new_node->address = 0;
 		else
 			new_node->address = dc;
 	}
-	else
+	else {
+		new_node->isInstruction = 0;
 		new_node->address = ic + 100;
+	}
 	return new_node;
 }
 
@@ -649,12 +718,9 @@ data * create_data(data * new_node, char val[TOKEN_LEN],int tt) {
 	void initData(data** h) {
 		*h = NULL;
 	}
-<<<<<<< HEAD
-=======
 	void initInstructions(instruction ** h) {
 		*h = NULL;
 	}
->>>>>>> amit
 
 
 

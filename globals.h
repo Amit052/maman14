@@ -14,19 +14,17 @@ typedef struct Symbol {
 	int isExternal;
 	struct symbol * next;
 }symbol;
+
 typedef struct Data {
 	int address;
 	word value;
 	struct data* next;
 } data;
+
 typedef struct Instruction {
 	int address;
 	word value;
-<<<<<<< HEAD
-	struct Instruction* next;
-=======
 	struct Instruction * next;
->>>>>>> amit
 } instruction;
 
  
