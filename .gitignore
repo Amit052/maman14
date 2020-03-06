@@ -1,7 +1,8 @@
 Debug
-Assembler.vcxproj
-Assembler.vcxproj.filters
-Assembler.vcxproj.user
+.vs
+maman14.vcxproj
+maman14.vcxproj.filters
+maman14.vcxproj.user
 Release
 maman14
 x64
