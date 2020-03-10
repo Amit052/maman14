@@ -1,5 +1,4 @@
 .extern W
-;something
 .entry LENGTH
 MAIN:   mov r3,LENGTH
 LOOP:	jmp L1
@@ -13,6 +12,6 @@ L1:	inc K
 END:	stop
 STR: 	.string "aaa a"
 LENGTH: .data 6, -9,15
-Kk:	.data 22
+K:	.data 22
 .extern L3
 .entry way
