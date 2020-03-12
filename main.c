@@ -8,6 +8,11 @@
 
 //TODO -> FIX A.R.E FIELDS
 /*function declerations*/
+void free_datas(data** head);
+char* create_file_name(char* fname, char* ext);
+void free_instructions(instruction** head);
+void free_symbols(symbol** head);
+void free_externals(external** head);
 void read_file(char file_name[MAX_FILE_NAME], int iteration);
 external* create_extern(external* new_node, int ic, char* val);
 int update_instruction(instruction** int_head, symbol** sym_head, int ins_address, char* name);
@@ -18,25 +23,21 @@ void print_externalsTable(  head);
 int updateDataTable(data** head, char* val, int tt);
 int get_operand_type(char* op);
 int update_instruction_table(instruction** h, word w);
-void print_entries(symbol** h);
+void print_entries(symbol** h, char * fname);
 void handle_symbol_and_op(int op, char* val_l, char* val_r);
 int update_symbol(symbol** h, char* name);
 void create_first_bin_word(word* w, int op_code, int op_l, int op_r);
-void initSymbols(symbol** h);
-void print_externals(symbol** h);
 void fix_symbolTable_addresses(symbol** head);
-void print_instructionsTable(instruction** head);
+void print_instructionsTable(instruction** head, char * fname);
 instruction* create_instruction(instruction* new_node, word w);
 char* dec_2_bin(char* str, int num, int length);
-char* op_2_str(int op, char* val);
-void initData(data** h);
+char* op_2_str(char * str, int op, char* val);
 int is_op_valid(int op, int op_l, int op_r);
 int prepare_instruction_words(int op_code, int op_l, int op_r, char* val_l, char* val_r);
-void initInstructions(instruction** h);
 symbol * create_symbol(symbol * new_node, char name[SYMBOL_LEN], int isInstruction, int isExternal);
-int symbolExists(symbol ** h, char name[SYMBOL_LEN]);
+int symbolExists(symbol ** h, char name[SYMBOL_LEN], int isExtern);
 int getTokenType(char token[TOKEN_LEN]);
-void print_dataTable(data ** head);
+void print_dataTable(data ** head, char * fname);
 void print_symbolTable(symbol ** head);
 data * create_data(data * new_node, char val[TOKEN_LEN], int tt);
 int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]);
@@ -47,7 +48,7 @@ int isNum(char* num);
 void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]);
 /*function declerations end*/
 
-int dc = 0, ic = 0, line = 0, symbolFlag = 0, errorFlag = 0;
+int dc = 0, ic = 0, line = 0, symbolFlag = 0, errorFlag = 0, current_line = 0;
 enum tokenType { Symbol, Extern, Entry, Data, String };
 enum flagState { Off, On };
 enum char_type { NUM, STR };
@@ -67,53 +68,73 @@ void main(int argc, char *argv[]) {
 	int i;
 	char* fname;
 	if (argc > 1) {
-		
-		for (i = 1; i < argc; i++){
-			dc = ic = 0;
-			fname = (char*)malloc(sizeof(char) * strlen(argv[i]) + 4);
-			if (fname != NULL) {
-				strcpy(fname, argv[i]);
-				strcat(fname, ".as");
-			}
-			else {
-				puts("Unable to allocate memory.\n");
+		for (i = 1; i < argc; i++){/*go over all the arguments we got(file names)*/
+			dc = ic = errorFlag = 0;
+			//fname = (char*)malloc(sizeof(char) * strlen(argv[i]) + 4); // 4 == ".as\0"  need to concatenate .as to file name in order to open it
+			fname = create_file_name(argv[i], ".as");
+			if (fname == NULL) {
+				printf("Unable to allocate memory for file name\n");
 				continue;
 			}
 			printf("_______________________%s_______________________\n", fname);
-			read_file(fname, FIRST_ITERATION);
-			ic = 0;
-			if (errorFlag == 1)
+			read_file(fname, FIRST_ITERATION);/*start reeading the file*/
+			if (errorFlag == 1)/*if we got errors on first iteration then no need to move to the second*/
 				printf("Errors found on first iteration, program stops here :(\n");
 			else {
-				fix_symbolTable_addresses(&symbolsTable);
+				fix_symbolTable_addresses(&symbolsTable);//
 				read_file(fname, SECOND_ITERATION);
-				printf("IC: %d\n", ic - 1);
-				printf("DC: %d\n", dc);
-				print_instructionsTable(&instructionTable);
-				print_dataTable(&dataTable);
-				print_entries(&symbolsTable);
-				print_externalsTable(&externalTable);
+
+				printf("IC: %dm DC: %d\n", ic - 1, dc);
+				fname = create_file_name(argv[i], ".obj");
+				print_instructionsTable(&instructionTable,fname);
+				print_dataTable(&dataTable, fname);
+				fname = create_file_name(argv[i], ".ent");
+				print_entries(&symbolsTable, fname);
+				fname = create_file_name(argv[i], ".ext");
+				print_externalsTable(&externalTable, fname);
 			}
+			free_datas(&dataTable);
+			free_instructions(&instructionTable);
+			free_externals(&externalTable);
+			free_symbols(&symbolsTable);
 		}
+		puts("\nDone.");
 	}
 	else {
+		char* f;
+		f = (char*)malloc(sizeof(char) * MAX_FILE_NAME);
+		if (f != NULL) {
+			puts("Please enter file name:");
+			scanf("%s", f);
 		externalTable = NULL; symbolsTable = NULL;  dataTable = NULL; instructionTable = NULL;
-		read_file("badpath-indirect.as", FIRST_ITERATION);
+		fname = create_file_name(f, ".as");
+		read_file(fname, FIRST_ITERATION);
 		fix_symbolTable_addresses(&symbolsTable);
 		ic = 0;
 		if (errorFlag == 1)
 			printf("Errors found on first iteration, program stops here :(\n");
 		else
 		{
-			read_file("badpath-indirect.as", SECOND_ITERATION);
+			read_file(fname, SECOND_ITERATION);
 			printf("IC: %d\n", ic - 1);
 			printf("DC: %d\n", dc);
-			print_instructionsTable(&instructionTable);
-			print_dataTable(&dataTable);
-			print_entries(&symbolsTable);
-			print_externalsTable(&externalTable);
+			fname = create_file_name(f, ".obj");
+			print_instructionsTable(&instructionTable, fname);
+			print_dataTable(&dataTable, fname);
+			fname = create_file_name(f, ".ent");
+			print_entries(&symbolsTable, fname);
+			fname = create_file_name(f, ".ext");
+			print_externalsTable(&externalTable,fname);
 		}
-
+		free_datas(&dataTable);
+		free_instructions(&instructionTable);
+		free_externals(&externalTable);
+		free_symbols(&symbolsTable);
+		puts("\nDone.");
+	}
+		else {
+		puts("can not allocate memory for file name");
+		}
 	}
 }
 
@@ -144,55 +165,48 @@ char* bin_2_octal(char * bin, char octal[6]) {
 	//printf("bin: %s =>%s\n", bin,  strrev(res));
 	return octal;
 }
-void print_entries(symbol** head) {
-	symbol* cur_node = NULL;
-	puts("Entries:");
-	while (*head) {
-		if ((*head)->isEntry == 1) {
-			printf("%d %s\n", (*head)->address, (*head)->name);
-		}
-		cur_node = *head;
-		*head = (*head)->next;
-		free(cur_node);
-	}
 
-}
-void print_externals(symbol** h) {
-	symbol* cur_node = *h;
-	puts("Externals:");
-	while (cur_node) {
-		if (cur_node->isExternal == 1) {
-			printf("%d %s\n", cur_node->address, cur_node->name);
-		}
-		cur_node = cur_node->next;
-	}
-}
+
 void read_file(char file_name[MAX_FILE_NAME], int iteration) {
-	char tokens[MAX_FILE_LEN][MAX_CMD_TOKENS][TOKEN_LEN] = {'\0'};
-	char buffer[MAX_CMD_TOKENS * TOKEN_LEN + 1];
-	int cnt = 0;
+	char tokens[MAX_FILE_LEN][MAX_CMD_TOKENS][TOKEN_LEN];// = { '\0' }; /*each line will get separate to individual words assigned here*/
+	char* buffer;// [MAX_CMD_TOKENS * TOKEN_LEN + 1] ;/*will hold the current line from the file*/
+	current_line = 0;/*counts the lines + comment lines for pointing on specific line on error messages*/
+	ic = line = 0;
 	FILE *fp;
-	fp = fopen(file_name, "r+");
+	fp = fopen(file_name, "r");
 	if (fp == NULL) {
 		printf("Error->unable to open file [%s].\n", file_name);
 		return;
 	}
-	/*read line*/
+	/*loops over the file lines*/
+	buffer = (char*)malloc(sizeof(char) * (MAX_CMD_TOKENS * TOKEN_LEN) + 1);
+	if (buffer == NULL) {
+		errorFlag = 1;
+		printf("unable to allocate memory for read file lines... \n");
+		return;
+	}
 	while (fgets(buffer, MAX_CMD_TOKENS * TOKEN_LEN + 1, fp) != NULL) {
-		int fields;
-		if (buffer[0] == ';') continue;//Comment line
-		fields = tokenize_cmd(buffer, tokens[line]);/*separate to fields*/
+		int fields;/*will get the tokens count*/
+		current_line++;
+		if (buffer[0] == ';') continue;/*if its a comment line ignore and proceed to next line*/
+		fields = tokenize_cmd(buffer, tokens[line]);/*separate to fields into the "token" array at the right index*/
+		if (fields == -1) {/* will get -1 if we exceed the limit of w token length*/
+			errorFlag = 1;/*turn on the error flag so we will know that no need to go for a second iteration*/
+			buffer[0] = 0;
+			continue;
+		}
+		if (fields == 0) continue; /*ignor empty line*/
 		if (iteration == FIRST_ITERATION)
 			handleLine(fields, tokens[line++]);
 		else
 			finishHim(fields, tokens[line++]);
+
 		buffer[0] = 0;/*clear the buffer to be ready for next line*/
-		if (++cnt == MAX_FILE_LEN) {
+		if (current_line == MAX_FILE_LEN) {/*checks if we reached the max file length alowed*/
 			printf("File too long...\n");
 			break;
 		}
 	}
-	line = 0;
 	fclose(fp);
 	
 }
@@ -200,12 +214,16 @@ void read_file(char file_name[MAX_FILE_NAME], int iteration) {
 int finishHim(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 	int ff, i;//ff == first field
 	ff = getTokenType(tokens[0]);/*get field type*/
+
 	if (ff == Extern || ff == String || ff == Data) return 1;
 	if (ff == Entry) {/**/
+
 		for (i = 1; i < fields; i++) {
 			if (strcmp(tokens[i], ",") == 0) continue;
 			if (update_symbol(&symbolsTable, tokens[i]) == 0) {
-				printf("Symbol was not found! [%s]\n", tokens[i]);
+				errorFlag = 1;
+				printf("Line %d - Symbol was not found! [%s]\n",current_line, tokens[i]);
+				return 0;
 			}
 		}
 	}
@@ -222,6 +240,7 @@ int finishHim(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 			if (tmp == 0)
 				handle_symbol_and_op(sf - 10, "", "");
 		}
+		return 1;
 	}
 	////////
 	if (ff >= 10) {
@@ -319,8 +338,7 @@ int update_instruction(instruction ** int_head, symbol** sym_head, int ins_addre
 		sym_node = sym_node->next;
 	}
 	if (flag == 0) { 
-		puts(name);
-		puts("NOT FOUND");
+		printf("Line %d - symbol not found -> [%s]\n", current_line, name);
 		return 0; 
 	}
 	while (ins_node) {
@@ -344,70 +362,121 @@ int update_symbol(symbol** h, char * name) {
 	}
 	return 0;
 }
-
+/*each line on first iteration get here*/
 int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 	int ff, t;//ff == first field
 	ff = getTokenType(tokens[0]);/*get field type*/
-	t = symbolExists(&symbolsTable, tokens[0]);
-	if (ff == Extern || ff == Symbol) {
+
+	/*if Entry only check if argument was passed, need to ignore on first round*/
+	if (ff == Entry) {
+		if (fields == 1) {
+			errorFlag = 1;
+			printf("line %d - Entry can not be empty\n", current_line);
+			return 0;
+		}
+		return 1;
+	}
+	/*if first field is .extern, need to update symbol table with second field*/
+	if (ff == Extern) {
+		int tmp;
+		t = symbolExists(&symbolsTable, tokens[1], 1);
+		if (t == 1) {/*if symbol already exists print error and return*/
+			errorFlag = 1;
+			printf("line %d - symbol already exists -> %s\n", current_line, tokens[1]);
+			return 0;
+		}
+		tmp = updateSymbolTable(&symbolsTable, tokens[1], 0, 1);		/*if symbol not exist, update it in the symbols table*/
+		if (tmp == 0) {/*if something went wrong while saving print error and return*/
+			errorFlag = 1;
+			printf("Error saving symbol %s\n", tokens[1]);
+			return 0;
+		}
+	}
+/*if first field is symbol*/
+	else if (ff == Symbol) {
+		int i, sf;//second flag
+		t = symbolExists(&symbolsTable, tokens[0], 0);
+		/*check the results and print relevant error if needed*/
 		if (t == 1) {
-			printf("%s -> Symbol already exists.\n", tokens[0]);
+			printf("line %d - Symbol already exists - [%s].\n", current_line, tokens[0]);
 			return 0;
 		}
 		else if (t == -1) {
-			printf("%s -> cannot use operation name to a sybol.\n", tokens[0]);
+			printf("line %d - cannot use operation name for a symbol - [%s].\n", current_line, tokens[0]);
 			return 0;
 		}
 		else if (t == -2) {
-			printf("%s -> cannot use Register name to a symbol.\n", tokens[0]);
+			printf("line %d - cannot use Register name for a symbol - [%s].\n", current_line, tokens[0]);
 			return 0;
 		}
-	}
-	if (ff == Extern) {/*if Extern, update symbol table with second field*/
-		int tmp;
-		tmp = updateSymbolTable(&symbolsTable, tokens[1], 0, 1);
-		if (tmp == 0) printf("Error saving symbol %s\n", tokens[1]);
-		return 0;
-	}
-	/*if Entry, need to ignore on first round*/
-	else if (ff == Entry) {
-		return 1;
-	}
-	else if (ff == Symbol) {
-		int i, sf;//second flag
+		/*if no errors were found*/
 		updateFlag(&symbolFlag, On);/*turn on symbol flag*/
-		sf = getTokenType(tokens[1]);
-		if (sf == String || sf == Data) {//if instruction, parse parameters to word and move to data table
-				if (updateSymbolTable(&symbolsTable, tokens[0], 1, 0)) {
-					int psikFlag = 0;
-					for (i = 2; i < fields; i++) {
-						if (strcmp(tokens[i], ",") == 0) {
-							if (psikFlag == 1) {
+		
+		sf = getTokenType(tokens[1]);/*get the type of the second token*/
+
+		if (sf == Entry) {/*if second field is entry need to ignore on first ireration but checks if an argument was passed to it*/
+			if (fields == 2) {
+				errorFlag = 1;
+				printf("Entry can not be empty - line %d\n", current_line);
+				return 0;
+			}
+			return 1;
+		}
+		if (sf == Extern) {/*second word is .extern*/
+			int tmp;
+			t = symbolExists(&symbolsTable, tokens[2], 1);/*check if symbol already exists*/
+			if (t == 1) {
+				printf("symbol already exists -> %s\n", tokens[2]);
+				return 0;
+			}
+			tmp = updateSymbolTable(&symbolsTable, tokens[2], 0, 1);/*if not exists update in the symbol table*/
+			if (tmp == 0) printf("Error saving symbol %s\n", tokens[2]);
+			return 1;
+		}
+
+		if (sf == String || sf == Data) {//if string or number, parse parameters to word and move to data table
+			int tmp;
+			if (fields == 2) {/*must have values*/
+				errorFlag = 1;
+				printf("line %d - String and Data can not be empty\n", current_line);
+				return 0;
+			}
+			tmp = updateSymbolTable(&symbolsTable, tokens[0], 1, 0);/*update the symbol in the symbols table*/
+				if (tmp) {/*if update succeed*/
+					int psikFlag = 0;/*we use us to see that not more than one psiks or none between operands*/
+					for (i = 2; i < fields; i++) {/*2 == where the values begin*/
+						psikFlag = 1;
+						tmp = strcmp(tokens[i], ",");
+						if (tmp == 0) psikFlag = 1;
+							/*if (psikFlag == 1) {/*if we have psik after psik in a row then print error and return
 								errorFlag = 1;
 								printf("Too many psiks between the values!\n");
 								return 0;
 							}
-							if (i == fields - 1) {
+							if (i == fields - 1) {/*check if the last values is psik
 								errorFlag = 1;
 								printf("Too many psiks between the values!\n");
 								return 0;
 							}
-							psikFlag = 1;
+							/*if no error turn on the psik flag
 							continue; 
-						}
+						}*/
 						if (sf == Data) {
 							int j = 0;
-							if (tokens[0] == '-') j = 1;
+							if (tokens[i][0] == '-' || tokens[i][0] == '+'){
+								j = 1;
+							}
 							for (; j < strlen(tokens[i]); j++) {
+								if (strcmp(tokens[i], ",") == 0) continue;
 								if (tokens[i][j] < '0' || tokens[i][j] >'9') {
 									errorFlag = 1;
-									printf("invalid value: %s\n", tokens[i]);
+									printf("line %d - invalid value: [%s]\n", current_line, tokens[i]);
 									return 0;
 								}
 							}
 							if (psikFlag == 0 && i > 2) {
 								errorFlag = 1;
-								printf("No psik between the values!\n");
+								printf("No psik between the values on  line %d !\n", current_line);
 								return 0;
 							}
 							else {
@@ -416,8 +485,21 @@ int handleLine(int fields, char tokens[MAX_CMD_TOKENS][TOKEN_LEN]) {
 							}
 						}
 						else if (sf == String) {
-							unsigned k;
-							for (k = 0; k <= strlen(tokens[i]); k++) {
+							unsigned k, len;
+							len = strlen(tokens[i]);
+							if (fields > 3) {// 3-> symbol + .string + "string"
+								errorFlag = 1;
+								printf("line %d - Too many parameters for type string! => %d\n", current_line, fields);
+								return 0;
+							}
+							if (tokens[i][0] != '"' || tokens[i][len - 1] != '"') {
+								errorFlag = 1;
+								printf("line %d - Illegal String! -> [%s]\n", current_line, tokens[i]);
+								return 0;
+							}
+
+							for (k = 1; k < strlen(tokens[i])-1; k++) {
+								
 								updateDataTable(&dataTable, tokens[i][k], String);
 							}
 
@@ -470,8 +552,9 @@ if (ff == String || ff == Data) {//if instruction, parse parameters to word and 
 		}
 		else {
 			int i;
+			printf("line %d - Not valid -> ", current_line);
 			for (i = 0; i < fields; i++) printf("%s ", tokens[i]);
-			printf("Not valid!\n\n");
+			putchar('\n');
 		}
 	}
 	return 1;
@@ -489,11 +572,12 @@ void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS]
 			op_r = -2;//op not in use
 		if (op_l == -1 || op_r == -1) {//-1 is when operand type not recognized
 			int i;
-			printf("Illegal operands= >");
+			printf("line %d - Illegal operands -> ", current_line);
 			for (i = 0; i < fields; i++) {
 				printf("%s ", tokens[i]);
 			}
 			putchar('\n');
+			errorFlag = 1;
 			return;
 		}
 		valid = is_op_valid(op, op_l, op_r);
@@ -508,9 +592,9 @@ void handle_operation(int start, int op, int fields, char tokens[MAX_CMD_TOKENS]
 				num_of_words += 2;//1 for operation + 1 for operand
 		}
 		else {
-			for(int i = 0; i < fields; i++)
-				printf("%s ", tokens[i]);
-			puts(" - not valid");
+			printf("line %d - operation not valid -> ", current_line);
+			for (int i = 0; i < fields; i++) printf("%s ", tokens[i]);
+			putchar('\n');
 		}
 	}
 	else {// if operation needs no operands
@@ -555,8 +639,8 @@ int prepare_instruction_words(int op_code, int op_l, int op_r, char * val_l, cha
 	w.bits[0] = w1.bits[0] = w2.bits[0] = '\0';
 	char tmp_bin_left[13], tmp_bin_right[13];
 	create_first_bin_word(&w, op_code, op_l, op_r);// set w as the first word needed
-	strcpy(tmp_bin_left, op_2_str(op_l, val_l));
-	strcpy(tmp_bin_right, op_2_str(op_r, val_r));
+	op_2_str(tmp_bin_left, op_l, val_l);
+	 op_2_str(tmp_bin_right, op_r, val_r);
 	//start assemble the words
 	if (op_l == Reg || op_l == P_reg) {
 		strcpy(w1.bits, "000000");
@@ -638,9 +722,8 @@ instruction * create_instruction(instruction * new_node, word w) {
 	return new_node;
 }
 
-char* op_2_str(int op, char * val) {
+char* op_2_str(char * str, int op, char * val) {
 	int bin_len = 0, value = 0;
-	char tmp_bin[13];
 	if (strlen(val)) {
 		if (op == Reg || op == P_reg) {
 			bin_len = 3;
@@ -654,12 +737,12 @@ char* op_2_str(int op, char * val) {
 			bin_len = 12;
 			value = 0;
 		}
-		dec_2_bin(tmp_bin, value, bin_len);
+		dec_2_bin(str, value, bin_len);
 	}
 	else {
-		tmp_bin[0] = '\0';
+		str[0] = '\0';
 	}
-	return tmp_bin;
+	return str;
 }
  void create_first_bin_word(word * w, int op_code, int op_l, int op_r){
 	 char tmp_bin[5];
@@ -704,6 +787,10 @@ int is_op_valid(int op, int op_l, int op_r) {
 		}
 	if (op == 0 || op == 2 || op == 3) {//mov add sub
 		if (op_l >= Num && op_l <= Reg && op_r >= Num && op_r <= Reg)
+			if (op_l == op_r && op_r ==  Num) {
+				errorFlag = 1;
+				return 0;
+			}
 			return 1;
 	}
 
@@ -767,7 +854,7 @@ int isNum(char * num) {
 	tmp = strip_number(num);
 	if (tmp > HIGHEST_POSITIVE_12 || tmp < LOWEST_NEGATIVE_12) {
 		errorFlag = 1;
-		printf("Number is out of 12 bits range -> %d\n", tmp);	
+		printf("line %d - Number is out of 12 bits range -> %d\n", current_line, tmp);	
 		return -1;
 	}
 	return Num;
@@ -782,7 +869,7 @@ void translateToWord(char token[TOKEN_LEN], word * dest, int charType) {
 	}
 	if (val > HIGHEST_POSITIVE_15 || val < LOWEST_NEGATIVE_15) { 
 		errorFlag = 1;
-		printf("Number is out of 15 bits range -> %d\n", val);
+		printf("line %d - Number is out of 15 bits range -> %d\n", current_line, val);
 	}
 	for (i = 14; i >=  0; i--) {
 		if (val & 1)
@@ -801,17 +888,23 @@ int tokenize_cmd(char str[MAX_CMD_TOKENS * TOKEN_LEN + 1], char tokens[MAX_CMD_T
 	unsigned i, k, t;
 	char tmp[TOKEN_LEN];
 	i = 0;
-	while (str[i] == ' ' && i++ < strlen(str));//remove leading spaces
+	while ((str[i] == ' ' || str[i] == '	' ) && i++ < strlen(str));//remove leading spaces
 	for (k = t = 0; i <= strlen(str); i++) {
-		if (str[i] != ' ' && str[i] != '\t' && str[i] != ',' && str[i] != '\0' && str[i] != '\n' && str[i] != EOF) {
+		if (str[i] != ' ' && str[i] != '\t' && str[i] != ',' && str[i] != '\0' && str[i] != '\n' && str[i] != '\r' && str[i] != EOF) {
 			if (str[i] == '"') {
-				while (str[++i] != '"')
-				{
+				tmp[k++] = str[i];
+				while (str[++i] != '"' && i < strlen(str)) {
 					tmp[k++] = str[i];
 				}
+					tmp[k++] = str[i];
 			}
-			else
+			else {
+				if (k == TOKEN_LEN) {
+					printf("line %d - Token too long\n", current_line);
+					return -1;
+				}
 				tmp[k++] = str[i];
+			}
 		}
 		else {				
 			
@@ -822,6 +915,13 @@ int tokenize_cmd(char str[MAX_CMD_TOKENS * TOKEN_LEN + 1], char tokens[MAX_CMD_T
 			tmp[0] = '\0';
 			k = 0;
 			if (str[i] == ',') {
+				int l;
+				l = strcmp(*(tokens + t - 1), ",");
+				if (l == 0) {
+					errorFlag = 1;
+					printf("line %d - Too many psiks in a row\n", current_line);
+					return -1;
+				}
 				strcpy(*(tokens + t++), ",\0");
 			}
 			if (str[i] == ' ' || str[i] == '\t') {
@@ -829,13 +929,21 @@ int tokenize_cmd(char str[MAX_CMD_TOKENS * TOKEN_LEN + 1], char tokens[MAX_CMD_T
 			}
 		}
 	}
+	if (strcmp(*(tokens + t - 1), ",") == 0) {
+		printf("line %d - Line can not end with psik\n", current_line);
+		errorFlag = 1;
+		return -1;
+	}
 	return t;
 }
 
 
 int getTokenType(char token[TOKEN_LEN]) {
 	int res = -1;
-	if (token[strlen(token) - 1] == ':') res = Symbol;
+	if (token[strlen(token) - 1] == ':' ){
+		
+		res = Symbol;
+	}
 	else
 	if (strcmp(token, ".extern") == 0) res = Extern;
 	else
@@ -856,7 +964,14 @@ int getTokenType(char token[TOKEN_LEN]) {
 	}
 	if (res == -1 && strlen(token) > 0) {
 		errorFlag = 1;
-		printf("undefined instruction -> \"%s\"\n", token);
+		printf("line %d - undefined instruction on -> \"%s\"\n",current_line, token);
+	}
+	if (res == Symbol) {
+		if ((token[0] < 'a' || token[0] > 'z') && (token[0] < 'A' || token[0] >'Z')) {
+			errorFlag = 1;
+			printf("line %d - Illegal symbol name -> \"%s\"\n", current_line, token);
+			res = -1;
+		}
 	}
 	return res;
 }
@@ -891,18 +1006,29 @@ int updateSymbolTable(symbol ** head, char name[SYMBOL_LEN], int isInstruction, 
 }
 
 
-int symbolExists(symbol** h, char name[SYMBOL_LEN]) {
+int symbolExists(symbol** h, char name[SYMBOL_LEN], int isExtern) {
 	symbol* current_symbol = *h;
 	int tmp, i = 0;
 	char* tmpStr = (char*)malloc(sizeof(char) * strlen(name));
+	if(tmpStr != NULL){
 	strcpy(tmpStr, name);
-	tmp = strlen(name) - 1;
-	tmpStr[tmp] = '\0';
+	if (isExtern != 1) {
+		tmp = strlen(name) - 1;
+		tmpStr[tmp] = '\0';
+	}
 	while (current_symbol) {
 		tmp = strcmp(tmpStr, current_symbol->name);
 		if (tmp == 0) {
-			errorFlag = 1;
-			return 1;
+			if (isExtern == 0) {
+				errorFlag = 1;
+				return 1;
+			}
+			else {
+				if (current_symbol->isExternal == 0) {
+					errorFlag = 1;
+					return 1;
+				}
+			}
 		}
 		current_symbol = current_symbol->next;
 	}
@@ -918,6 +1044,8 @@ int symbolExists(symbol** h, char name[SYMBOL_LEN]) {
 		return -2;
 	}
 	return 0;
+}
+	return -4;
 }
 
 int updateDataTable(data ** head, char *val, int tt){
@@ -936,72 +1064,152 @@ int updateDataTable(data ** head, char *val, int tt){
 		return 1;
 }
 
-void printError()
-{
-	/*TODO step- 11 - if definition symbol, insert into symbol table with code property, value= IC+100, check if symbol exist (yes=error) */
-}
 
+void print_entries(symbol** head, char* fname) {
+	FILE* fp = NULL;
+	char octal[OCTAL_LEN];
+	char line[OUTPUT_LINE_SIZE];
+	char tmp[OCTAL_LEN];
+	if (*head == NULL) return;
+	fp = fopen(fname, "w");
+	if(fp != NULL){
+	puts("Entries:");
+	while (*head) {
+		if ((*head)->isEntry == 1) {
+			printf("%d %s\n", (*head)->address, (*head)->name);
+			tmp[0] = line[0] = '\0';
+			sprintf(tmp, " %d", (*head)->address);
+
+			strcpy(line, (*head)->name);
+			strcat(line, tmp);
+			strcat(line, "\n");
+			fputs(line, fp);
+
+		}
+		*head = (*head)->next;
+	}
+	}
+
+}
 	
 
-void print_dataTable(data ** head) {
-	data * tmp = NULL;
-	char octal[6];
-	while (*head)
-	{
-		int address = (*head)->address + ic + IC_OFFSET - 1;
-	//	while()
-		printf("%04d %s\n",address, bin_2_octal(&(*head)->value, octal));
-		tmp = *head;
-		*head = (*head)->next;
-		free(tmp);
+void print_dataTable(data ** head, char * fname) {
+	FILE* fp = NULL;
+	char octal[OCTAL_LEN];
+	char line[OUTPUT_LINE_SIZE];
+	char tmp[OCTAL_LEN];
+	fp = fopen(fname, "a");
+	if (fp != NULL) {
 
+		while (*head)
+		{
+			int address = (*head)->address + ic + IC_OFFSET - 1;
+			printf("%04d %s\n", address, bin_2_octal(&(*head)->value, octal));
+			tmp[0] = line[0] = '\0';
+			sprintf(tmp, "%04d ", address);
+			strcpy(line, tmp);
+			strcat(line, bin_2_octal(&(*head)->value, octal));
+			strcat(line, "\n");
+			fputs(line, fp);
+			*head = (*head)->next;
+		}
+		fclose(fp);
+	}
+	else {
+		printf("Unable to open %s for edit\n", fname);
 	}
 }
 void print_symbolTable(symbol** head) {
-	symbol* tmp = NULL;
 	while (*head)
 	{
 		printf(">address: %d,  value: %s\n", (*head)->address, (*head)->name);
-		tmp = *head;
 		*head = (*head)->next;
-		free(tmp);
 	}
 }
-void print_externalsTable(external** head) {
-	external* tmp = NULL;
+void print_externalsTable(external** head, char * fname) {
+	FILE* fp = NULL;
+	char line[OUTPUT_LINE_SIZE];
+	char tmp[SYMBOL_LEN];
 	puts("Externals:");
-	while (*head)
-	{
-		printf("%s %d\n", (*head)->name, (*head)->address);
-		tmp = *head;
-		*head = (*head)->next;
-		free(tmp);
+	if (*head != NULL) {
+
+		fp = fopen(fname, "w");
+		if (fp != NULL) {
+			while (*head)
+			{
+				tmp[0] = line[0] = '\0';
+				strcpy(line, (*head)->name);
+				sprintf(tmp, " %04d", (*head)->address);
+				strcat(line, tmp);
+				strcat(line, "\n");
+				fputs(line, fp);
+				printf("%s %d\n", (*head)->name, (*head)->address);
+				*head = (*head)->next;
+			}
+		}
 	}
 }
+
+/*after all insructions where inserted to the instruction table we want to concatenate the symbols table to the bottom of the instructions table
+so need to add the current symbols addresses the IC + the offset to the IC(where the program was loaded to the memory)
+*/
 void fix_symbolTable_addresses(symbol** head) {
 	symbol* tmp = *head;
 	while (tmp)
-
 	{
 		if(tmp->isInstruction)
 			tmp->address += (IC_OFFSET + ic);
 		tmp = tmp->next;
 	}
 }
-
-
-void print_instructionsTable(instruction** head) {
-	instruction* tmp = NULL;
-	char octal[6];
-	printf("Instructions Table\n");
-	while (*head)
-	{
-		printf("%04d %s\n", (*head)->address, bin_2_octal(&(*head)->value, octal));
-		tmp = *head;
-		*head = (*head)->next;
-		free(tmp);
+char* create_file_name(char* fname, char* ext) {
+	char* tmp;
+	int l;
+	l = strlen(fname) + strlen(ext) + 1;
+	tmp = (char*)malloc(sizeof(char) * l);
+	if (tmp != NULL) {
+		strcpy(tmp, fname);
+		strcat(tmp, ext);
+		return tmp;
 	}
+	return NULL;
 }
+
+void print_instructionsTable(instruction** head, char * fname) {
+	char octal[OCTAL_LEN];
+	char line[6 + SYMBOL_LEN];
+	char tmp[OCTAL_LEN];
+	if (*head == NULL) return;
+		puts(fname);
+		FILE* fp = NULL;
+		if (ic > 0 || dc > 0)
+			fp = fopen(fname, "w");
+		if (fp != NULL) {
+			sprintf(tmp, "%5d", ic - 1);
+			strcpy(line, tmp);
+			strcat(line, " ");
+			sprintf(tmp, "%d", dc);
+			strcat(line, tmp);
+			strcat(line, "\n");
+			printf("Instructions Table\n");
+			fputs(line, fp);
+			while (*head)
+			{
+				printf("%04d %s\n", (*head)->address, bin_2_octal(&(*head)->value, octal));
+				line[0] = tmp[0] = '\0';
+				sprintf(tmp, "%04d", (*head)->address);
+				strcpy(line, tmp);
+				strcat(line, " ");
+				strcat(line, bin_2_octal(&(*head)->value, octal));
+				strcat(line, "\n");
+				fputs(line, fp);
+				*head = (*head)->next;
+			}
+			fclose(fp);
+		}
+		else  puts("Cannot create obj file.");
+	}
+
 
 
 symbol * create_symbol(symbol * new_node, char name[SYMBOL_LEN], int isInstruction, int isExternal) {
@@ -1044,19 +1252,45 @@ data * create_data(data * new_node, char val[TOKEN_LEN],int tt) {
 		new_node->next = NULL;
 	return new_node;
 }
-
-
-
-	void initSymbols(symbol** h) {
-		*h = NULL;
+void free_datas(data** head) {
+	data* tmp = NULL;
+	while (*head)
+	{
+		tmp = *head;
+		*head = (*head)->next;
+		free(tmp);
 	}
-	void initData(data** h) {
-		*h = NULL;
+}
+void free_instructions(instruction** head) {
+	instruction* tmp = NULL;
+	while (*head)
+	{
+		tmp = *head;
+		*head = (*head)->next;
+		free(tmp);
 	}
-	void initInstructions(instruction ** h) {
-		*h = NULL;
+}
+
+void free_externals(external ** head) {
+	external* tmp = NULL;
+	while (*head)
+	{
+		tmp = head;
+		*head = (*head)->next;
+		free(tmp);
 	}
+}
 
+void free_symbols(symbol** head) {
+	symbol* tmp = NULL;
+	while (*head)
+	{
+		tmp = *head;
+		*head = (*head)->next;
+		free(tmp);
+	}
+}
 
-
+ 
+//MACRO TO FREE ALL LINKED LISTS + REMOVE THE FREE() FROM THE PRINT LIST FUNCTIONS
 
